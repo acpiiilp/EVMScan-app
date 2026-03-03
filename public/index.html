@@ -1,0 +1,408 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EVM SCANNER — Bulk Wallet Lookup</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap');
+  :root {
+    --bg:#050810;--panel:#0a0f1e;--border:#1a2340;
+    --green:#00ff88;--cyan:#00cfff;--yellow:#ffe135;
+    --red:#ff4444;--muted:#3a4a6a;--text:#c8d8f0;
+    --font-mono:'Share Tech Mono',monospace;
+    --font-ui:'Exo 2',sans-serif;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:var(--bg);color:var(--text);font-family:var(--font-ui);min-height:100vh;
+    background-image:radial-gradient(ellipse at 20% 20%,rgba(0,207,255,0.04) 0%,transparent 60%),
+    radial-gradient(ellipse at 80% 80%,rgba(0,255,136,0.03) 0%,transparent 60%);}
+  .header{padding:24px 40px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
+  .logo{font-family:var(--font-mono);font-size:11px;letter-spacing:4px;color:var(--cyan);}
+  .logo span{color:var(--green);}
+  .status-dot{width:8px;height:8px;background:var(--green);border-radius:50%;box-shadow:0 0 8px var(--green);animation:pulse 2s infinite;}
+  @keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+  .main{max-width:1100px;margin:0 auto;padding:40px;}
+  .title{font-family:var(--font-ui);font-size:42px;font-weight:800;letter-spacing:-1px;margin-bottom:4px;
+    background:linear-gradient(135deg,var(--cyan),var(--green));-webkit-background-clip:text;
+    -webkit-text-fill-color:transparent;background-clip:text;}
+  .subtitle{font-family:var(--font-mono);font-size:11px;color:var(--muted);letter-spacing:2px;margin-bottom:36px;}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:24px;}
+  @media(max-width:700px){.grid{grid-template-columns:1fr;}}
+  .panel{background:var(--panel);border:1px solid var(--border);padding:24px;position:relative;}
+  .panel::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,var(--cyan),var(--green));}
+  .panel-label{font-family:var(--font-mono);font-size:10px;letter-spacing:3px;color:var(--muted);margin-bottom:12px;display:flex;justify-content:space-between;align-items:center;}
+  .form-input{width:100%;background:#080d1a;border:1px solid var(--border);color:var(--text);font-family:var(--font-mono);font-size:12px;padding:12px;outline:none;transition:border-color 0.2s;resize:vertical;}
+  .form-input:focus{border-color:var(--cyan);}
+  .form-input::placeholder{color:var(--muted);}
+  .chain-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;}
+  .chain-tag{padding:8px 6px;background:#080d1a;border:1px solid var(--border);font-family:var(--font-mono);font-size:10px;color:var(--muted);text-align:center;cursor:pointer;transition:all 0.15s;letter-spacing:1px;}
+  .chain-tag:hover{border-color:var(--cyan);color:var(--cyan);}
+  .chain-tag.active{border-color:var(--green);color:var(--green);background:rgba(0,255,136,0.05);}
+  .small-btn{font-family:var(--font-mono);font-size:10px;color:var(--cyan);background:none;border:none;cursor:pointer;letter-spacing:1px;}
+  .scan-btn{width:100%;background:linear-gradient(135deg,#00cfff22,#00ff8822);border:1px solid var(--cyan);color:var(--cyan);padding:18px;font-family:var(--font-ui);font-size:16px;font-weight:600;letter-spacing:3px;cursor:pointer;transition:all 0.2s;margin-bottom:24px;}
+  .scan-btn:hover{background:linear-gradient(135deg,#00cfff44,#00ff8844);box-shadow:0 0 20px rgba(0,207,255,0.2);}
+  .scan-btn:disabled{opacity:0.4;cursor:not-allowed;box-shadow:none;}
+  .progress-area{display:none;background:var(--panel);border:1px solid var(--border);padding:24px;margin-bottom:24px;}
+  .progress-area.visible{display:block;}
+  .progress-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;}
+  .progress-label{font-family:var(--font-mono);font-size:11px;color:var(--cyan);letter-spacing:2px;}
+  .progress-count{font-family:var(--font-mono);font-size:11px;color:var(--muted);}
+  .progress-bar-track{height:4px;background:var(--border);margin-bottom:12px;}
+  .progress-bar-fill{height:100%;background:linear-gradient(90deg,var(--cyan),var(--green));transition:width 0.3s;width:0%;}
+  .progress-log{font-family:var(--font-mono);font-size:11px;color:var(--muted);height:100px;overflow-y:auto;line-height:1.8;}
+  .progress-log .ok{color:var(--green);}
+  .progress-log .err{color:var(--red);}
+  .progress-log .info{color:var(--cyan);}
+  .results-area{display:none;}
+  .results-area.visible{display:block;}
+  .summary-bar{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-bottom:24px;}
+  .summary-card{background:var(--panel);border:1px solid var(--border);padding:20px;text-align:center;}
+  .summary-number{font-family:var(--font-ui);font-size:32px;font-weight:800;color:var(--green);line-height:1;margin-bottom:6px;}
+  .summary-label{font-family:var(--font-mono);font-size:10px;letter-spacing:2px;color:var(--muted);}
+  .results-header{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;}
+  .results-title{font-family:var(--font-mono);font-size:11px;letter-spacing:3px;color:var(--green);}
+  .export-btn{background:transparent;border:1px solid var(--green);color:var(--green);padding:8px 16px;font-family:var(--font-mono);font-size:11px;letter-spacing:2px;cursor:pointer;transition:all 0.2s;}
+  .export-btn:hover{background:rgba(0,255,136,0.1);}
+  .filter-bar{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;}
+  .filter-btn{padding:6px 12px;background:#080d1a;border:1px solid var(--border);font-family:var(--font-mono);font-size:10px;color:var(--muted);cursor:pointer;letter-spacing:1px;transition:all 0.15s;}
+  .filter-btn:hover,.filter-btn.active{border-color:var(--cyan);color:var(--cyan);}
+  .results-table{width:100%;border-collapse:collapse;font-family:var(--font-mono);font-size:12px;}
+  .results-table th{padding:10px 12px;text-align:left;font-size:10px;letter-spacing:2px;color:var(--muted);border-bottom:1px solid var(--border);background:var(--panel);cursor:pointer;}
+  .results-table th:hover{color:var(--cyan);}
+  .results-table td{padding:10px 12px;border-bottom:1px solid #0d1428;color:var(--text);}
+  .results-table tr:hover td{background:rgba(0,207,255,0.03);}
+  .address-cell{font-size:11px;color:var(--cyan);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+  .chain-badge{display:inline-block;padding:2px 7px;background:rgba(0,207,255,0.08);border:1px solid rgba(0,207,255,0.2);font-size:10px;color:var(--cyan);}
+  .token-name{color:var(--yellow);}
+  .balance-val{color:var(--green);}
+  .usd-val{color:var(--text);}
+  .usd-high{color:var(--green);font-weight:600;}
+  .empty-state{text-align:center;padding:60px;font-family:var(--font-mono);font-size:12px;color:var(--muted);letter-spacing:2px;}
+  .ad-slot{background:var(--panel);border:1px solid var(--border);border-left:3px solid var(--yellow);padding:16px 20px;margin-bottom:24px;display:flex;align-items:center;justify-content:space-between;}
+  .ad-label{font-family:var(--font-mono);font-size:9px;letter-spacing:2px;color:var(--muted);}
+  .ad-content{font-family:var(--font-mono);font-size:12px;color:var(--yellow);}
+</style>
+</head>
+<body>
+<div class="header">
+  <div class="logo">EVM<span>SCAN</span> // BULK WALLET ANALYZER</div>
+  <div style="display:flex;align-items:center;gap:16px">
+    <span style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">18 CHAINS</span>
+    <div class="status-dot"></div>
+  </div>
+</div>
+
+<div class="main">
+  <div class="title">EVM SCANNER</div>
+  <p class="subtitle">// BULK WALLET LOOKUP ACROSS 18 EVM CHAINS — FREE — NON-ZERO BALANCES</p>
+
+  <div class="ad-slot">
+    <div>
+      <div class="ad-label">SPONSORED</div>
+      <div class="ad-content">Your crypto ad here — asteriacapitalpartners@gmail.com</div>
+    </div>
+    <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">AD</div>
+  </div>
+
+  <div class="grid">
+    <div class="panel">
+      <div class="panel-label">
+        // WALLET ADDRESSES — ONE PER LINE
+        <span id="addr-count" style="color:var(--cyan)">0 entered</span>
+      </div>
+      <textarea class="form-input" id="addresses" rows="14"
+        placeholder="0x1234...abcd&#10;0x5678...efgh&#10;&#10;Paste up to 100 EVM addresses"></textarea>
+    </div>
+
+    <div class="panel">
+      <div class="panel-label">
+        // SELECT CHAINS (18 EVM)
+        <button class="small-btn" onclick="toggleAll()">TOGGLE ALL</button>
+      </div>
+      <div class="chain-grid" id="chain-grid"></div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted);margin-top:10px">
+        <span id="chain-count">18</span> chains selected
+      </div>
+    </div>
+  </div>
+
+  <button class="scan-btn" id="scan-btn" onclick="startScan()">⬡ INITIATE BULK SCAN</button>
+
+  <div class="progress-area" id="progress-area">
+    <div class="progress-header">
+      <div class="progress-label">// SCANNING IN PROGRESS</div>
+      <div class="progress-count" id="progress-text">0 / 0</div>
+    </div>
+    <div class="progress-bar-track"><div class="progress-bar-fill" id="progress-bar"></div></div>
+    <div class="progress-log" id="progress-log"></div>
+  </div>
+
+  <div class="results-area" id="results-area">
+    <div class="summary-bar">
+      <div class="summary-card">
+        <div class="summary-number" id="sum-wallets">0</div>
+        <div class="summary-label">WALLETS WITH BALANCE</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-number" id="sum-tokens">0</div>
+        <div class="summary-label">TOKEN POSITIONS</div>
+      </div>
+      <div class="summary-card">
+        <div class="summary-number" id="sum-usd">$0</div>
+        <div class="summary-label">TOTAL USD VALUE</div>
+      </div>
+    </div>
+
+    <div class="results-header">
+      <div class="results-title">// NON-ZERO BALANCES — SORTED BY VALUE</div>
+      <button class="export-btn" onclick="exportCSV()">↓ EXPORT CSV</button>
+    </div>
+
+    <div class="filter-bar" id="filter-bar"></div>
+
+    <div style="overflow-x:auto">
+      <table class="results-table">
+        <thead>
+          <tr>
+            <th onclick="sortBy('address')">ADDRESS ↕</th>
+            <th onclick="sortBy('chain')">CHAIN ↕</th>
+            <th onclick="sortBy('token')">TOKEN ↕</th>
+            <th onclick="sortBy('balance')">BALANCE ↕</th>
+            <th onclick="sortBy('usd')">USD VALUE ↕</th>
+          </tr>
+        </thead>
+        <tbody id="results-body"></tbody>
+      </table>
+    </div>
+
+    <div class="ad-slot" style="margin-top:24px">
+      <div>
+        <div class="ad-label">SPONSORED</div>
+        <div class="ad-content">Your crypto ad here — asteriacapitalpartners@gmail.com</div>
+      </div>
+      <div style="font-family:var(--font-mono);font-size:10px;color:var(--muted)">AD</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const PROXY = '/api/scan?url=';
+const API_KEY = 'AJPC1324TD1U37EAAUKDTMIN22XHI4U9R4';
+
+const CHAINS = [
+  {id:'eth',  name:'ETH',   label:'Ethereum',  url:'https://api.etherscan.io/api'},
+  {id:'arb',  name:'ARB',   label:'Arbitrum',  url:'https://api.arbiscan.io/api'},
+  {id:'op',   name:'OP',    label:'Optimism',  url:'https://api-optimistic.etherscan.io/api'},
+  {id:'base', name:'BASE',  label:'Base',      url:'https://api.basescan.org/api'},
+  {id:'matic',name:'MATIC', label:'Polygon',   url:'https://api.polygonscan.com/api'},
+  {id:'bsc',  name:'BNB',   label:'BSC',       url:'https://api.bscscan.com/api'},
+  {id:'avax', name:'AVAX',  label:'Avalanche', url:'https://api.snowtrace.io/api'},
+  {id:'ftm',  name:'FTM',   label:'Fantom',    url:'https://api.ftmscan.com/api'},
+  {id:'cro',  name:'CRO',   label:'Cronos',    url:'https://api.cronoscan.com/api'},
+  {id:'gnosis',name:'GNO',  label:'Gnosis',    url:'https://api.gnosisscan.io/api'},
+  {id:'glmr', name:'GLMR',  label:'Moonbeam',  url:'https://api-moonbeam.moonscan.io/api'},
+  {id:'movr', name:'MOVR',  label:'Moonriver', url:'https://api-moonriver.moonscan.io/api'},
+  {id:'celo', name:'CELO',  label:'Celo',      url:'https://api.celoscan.io/api'},
+  {id:'blast',name:'BLAST', label:'Blast',     url:'https://api.blastscan.io/api'},
+  {id:'linea',name:'LINEA', label:'Linea',     url:'https://api.lineascan.build/api'},
+  {id:'scroll',name:'SCROLL',label:'Scroll',   url:'https://api.scrollscan.com/api'},
+  {id:'zksync',name:'ZKSYNC',label:'zkSync',   url:'https://api-era.zksync.network/api'},
+  {id:'metis',name:'METIS', label:'Metis',     url:'https://api.routescan.io/v2/network/mainnet/evm/1088/etherscan/api'},
+];
+
+let selectedChains = new Set(CHAINS.map(c=>c.id));
+let results = [];
+let sortCol = 'usd', sortDir = -1, activeFilter = 'ALL';
+
+function initChains() {
+  const grid = document.getElementById('chain-grid');
+  CHAINS.forEach(chain => {
+    const div = document.createElement('div');
+    div.className = 'chain-tag active';
+    div.dataset.id = chain.id;
+    div.innerHTML = `<strong>${chain.name}</strong><br><span style="font-size:9px;opacity:0.6">${chain.label}</span>`;
+    div.onclick = () => {
+      if (selectedChains.has(chain.id)) { selectedChains.delete(chain.id); div.classList.remove('active'); }
+      else { selectedChains.add(chain.id); div.classList.add('active'); }
+      document.getElementById('chain-count').textContent = selectedChains.size;
+    };
+    grid.appendChild(div);
+  });
+}
+
+function toggleAll() {
+  const allOn = selectedChains.size === CHAINS.length;
+  selectedChains.clear();
+  document.querySelectorAll('.chain-tag').forEach(el => {
+    if (!allOn) { selectedChains.add(el.dataset.id); el.classList.add('active'); }
+    else el.classList.remove('active');
+  });
+  document.getElementById('chain-count').textContent = selectedChains.size;
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  initChains();
+  document.getElementById('addresses').addEventListener('input', () => {
+    document.getElementById('addr-count').textContent = getAddresses().length + ' entered';
+  });
+});
+
+function getAddresses() {
+  return [...new Set(
+    document.getElementById('addresses').value
+      .split('\n').map(a=>a.trim().toLowerCase())
+      .filter(a=>a.startsWith('0x')&&a.length===42)
+  )].slice(0,100);
+}
+
+async function proxyFetch(url) {
+  const res = await fetch(PROXY + encodeURIComponent(url));
+  if (!res.ok) throw new Error('Proxy error ' + res.status);
+  return res.json();
+}
+
+async function startScan() {
+  const addresses = getAddresses();
+  if (!addresses.length) { alert('Enter valid 0x addresses'); return; }
+  if (!selectedChains.size) { alert('Select at least one chain'); return; }
+
+  const chains = CHAINS.filter(c => selectedChains.has(c.id));
+  const total = addresses.length * chains.length;
+
+  results = [];
+  document.getElementById('scan-btn').disabled = true;
+  document.getElementById('progress-area').classList.add('visible');
+  document.getElementById('results-area').classList.remove('visible');
+  document.getElementById('progress-log').innerHTML = '';
+  document.getElementById('progress-bar').style.width = '0%';
+
+  let done = 0;
+
+  for (const address of addresses) {
+    for (const chain of chains) {
+      try {
+        const found = await fetchChain(address, chain);
+        if (found.length) {
+          results.push(...found);
+          log(`<span class="ok">✓</span> ${shortAddr(address)} / ${chain.name} — ${found.length} position(s)`);
+        }
+      } catch(e) {
+        log(`<span class="err">✗</span> ${shortAddr(address)} / ${chain.name} — ${e.message}`);
+      }
+      done++;
+      document.getElementById('progress-bar').style.width = Math.round(done/total*100)+'%';
+      document.getElementById('progress-text').textContent = `${done} / ${total}`;
+      await sleep(220);
+    }
+  }
+
+  document.getElementById('scan-btn').disabled = false;
+  log(`<span class="info">// COMPLETE — ${results.length} positions found across ${new Set(results.map(r=>r.address)).size} wallets</span>`);
+  renderResults();
+}
+
+async function fetchChain(address, chain) {
+  const found = [];
+
+  // Native balance
+  const native = await proxyFetch(
+    `${chain.url}?module=account&action=balance&address=${address}&tag=latest&apikey=${API_KEY}`
+  );
+  if (native.status === '1') {
+    const bal = parseFloat(native.result) / 1e18;
+    if (bal > 0.000001) found.push({address, chain:chain.name, chainLabel:chain.label, token:chain.name, tokenName:chain.label+' Native', balance:bal, usd:0});
+  }
+
+  await sleep(200);
+
+  // ERC20 tokens via token transfer history
+  const txs = await proxyFetch(
+    `${chain.url}?module=account&action=tokentx&address=${address}&startblock=0&endblock=99999999&sort=desc&apikey=${API_KEY}`
+  );
+
+  if (txs.status === '1' && Array.isArray(txs.result)) {
+    const contracts = [...new Set(txs.result.map(tx=>tx.contractAddress))].slice(0,15);
+    for (const contract of contracts) {
+      await sleep(150);
+      try {
+        const bal = await proxyFetch(
+          `${chain.url}?module=account&action=tokenbalance&contractaddress=${contract}&address=${address}&tag=latest&apikey=${API_KEY}`
+        );
+        if (bal.status==='1' && bal.result && bal.result!=='0') {
+          const info = txs.result.find(tx=>tx.contractAddress===contract);
+          const decimals = parseInt(info?.tokenDecimal||'18');
+          const b = parseFloat(bal.result)/Math.pow(10,decimals);
+          if (b>0.000001) found.push({
+            address, chain:chain.name, chainLabel:chain.label,
+            token:info?.tokenSymbol||'???', tokenName:info?.tokenName||'',
+            balance:b, usd:0
+          });
+        }
+      } catch(e) { /* skip */ }
+    }
+  }
+
+  return found;
+}
+
+function renderResults() {
+  document.getElementById('results-area').classList.add('visible');
+  document.getElementById('sum-wallets').textContent = new Set(results.map(r=>r.address)).size;
+  document.getElementById('sum-tokens').textContent = results.length;
+  document.getElementById('sum-usd').textContent = '$'+formatUSD(results.reduce((s,r)=>s+(r.usd||0),0));
+
+  const chains = ['ALL',...new Set(results.map(r=>r.chain))];
+  document.getElementById('filter-bar').innerHTML = chains.map(c=>
+    `<button class="filter-btn ${c===activeFilter?'active':''}" onclick="setFilter('${c}')">${c}</button>`
+  ).join('');
+  renderTable();
+}
+
+function setFilter(chain) {
+  activeFilter = chain;
+  document.querySelectorAll('.filter-btn').forEach(b=>b.classList.toggle('active',b.textContent===chain));
+  renderTable();
+}
+
+function sortBy(col) {
+  if (sortCol===col) sortDir*=-1; else {sortCol=col;sortDir=-1;}
+  renderTable();
+}
+
+function renderTable() {
+  const filtered = activeFilter==='ALL' ? results : results.filter(r=>r.chain===activeFilter);
+  const sorted = [...filtered].sort((a,b)=>{
+    const av=a[sortCol]??'', bv=b[sortCol]??'';
+    return typeof av==='number'?(av-bv)*sortDir:av.localeCompare(bv)*sortDir;
+  });
+  const tbody = document.getElementById('results-body');
+  if (!sorted.length) { tbody.innerHTML=`<tr><td colspan="5" class="empty-state">NO POSITIONS FOUND</td></tr>`; return; }
+  tbody.innerHTML = sorted.map(r=>`
+    <tr>
+      <td class="address-cell" title="${r.address}">${shortAddr(r.address)}</td>
+      <td><span class="chain-badge">${r.chain}</span></td>
+      <td class="token-name">${r.token} <span style="color:var(--muted);font-size:10px">${r.tokenName}</span></td>
+      <td class="balance-val">${formatBal(r.balance)}</td>
+      <td class="${r.usd>100?'usd-high':'usd-val'}">${r.usd>0?'$'+formatUSD(r.usd):'—'}</td>
+    </tr>`).join('');
+}
+
+function exportCSV() {
+  if (!results.length) return;
+  const rows = [['Address','Chain','Token','Token Name','Balance','USD']];
+  results.forEach(r=>rows.push([r.address,r.chainLabel,r.token,r.tokenName,r.balance,r.usd||0]));
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([rows.map(r=>r.join(',')).join('\n')],{type:'text/csv'}));
+  a.download = `evmscan_${new Date().toISOString().slice(0,10)}.csv`;
+  a.click();
+}
+
+function shortAddr(a){return a.slice(0,6)+'...'+a.slice(-4);}
+function formatBal(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(2)+'K';if(n<0.0001)return n.toExponential(2);return n.toFixed(4);}
+function formatUSD(n){if(n>=1e6)return(n/1e6).toFixed(2)+'M';if(n>=1e3)return(n/1e3).toFixed(1)+'K';return n.toFixed(2);}
+function sleep(ms){return new Promise(r=>setTimeout(r,ms));}
+function log(msg){const el=document.getElementById('progress-log');el.innerHTML+=msg+'<br>';el.scrollTop=el.scrollHeight;}
+</script>
+</body>
+</html>
